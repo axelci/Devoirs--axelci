@@ -16,52 +16,98 @@ h1{color:#A8E6CF;text-align:center;margin:20px 0 4px}
 .matiere{font-size:11px;font-weight:bold;color:#A8E6CF;margin-bottom:4px}
 .titre{font-size:15px;font-weight:bold;margin-bottom:4px}
 .date{font-size:12px;color:#7C7C9E}
-.form{background:#1A1A2E;border-radius:12px;padding:16px;margin:16px 0}
+.form{background:#1A1A2E;border-radius:12px;padding:16px;margin:16px 0;display:none}
+.form.visible{display:block}
 input,select{width:100%;background:#0F0F1A;border:1px solid #2A2A3E;border-radius:8px;padding:10px;color:#F0EEF8;font-size:14px;margin-bottom:10px}
 .btn{background:linear-gradient(135deg,#A8E6CF,#C3A6FF);border:none;padding:12px;border-radius:10px;font-weight:bold;cursor:pointer;width:100%;color:#0F0F1A;font-size:15px}
 .btns{display:flex;gap:8px;margin-top:8px}
 .btn-done{flex:1;background:#2A2A3E;border:none;padding:8px;border-radius:8px;color:#A8E6CF;cursor:pointer;font-size:13px}
 .btn-del{flex:1;background:#FF6B6B22;border:none;padding:8px;border-radius:8px;color:#FF6B6B;cursor:pointer;font-size:13px}
 .empty{text-align:center;color:#3A3A5E;padding:40px 0}
+.admin-btn{background:#2A2A3E;border:none;padding:8px 16px;border-radius:8px;color:#7C7C9E;cursor:pointer;font-size:12px;display:block;margin:0 auto 10px}
+.loading{text-align:center;color:#7C7C9E;padding:20px}
 </style>
 </head>
 <body>
 <h1>📚 Mes Devoirs</h1>
 <p class="sub">Application par <span>Axel CI</span> 🇨🇮</p>
-<div class="form">
+<button class="admin-btn" onclick="demanderAdmin()">🔐 Mode Admin</button>
+<div class="form" id="form">
 <select id="mat"><option>Maths</option><option>Français</option><option>Histoire</option><option>Sciences</option><option>Anglais</option><option>Géo</option><option>Arts</option><option>Sport</option></select>
 <input id="titre" placeholder="Titre du devoir ex: Exercices p.42" type="text">
 <input id="date" type="date">
 <select id="prio"><option>Urgent 🔴</option><option selected>Normal 🟡</option><option>Tranquille 🟢</option></select>
 <button class="btn" onclick="ajouter()">➕ Ajouter le devoir</button>
 </div>
-<div id="liste"><div class="empty">📭 Aucun devoir pour l'instant</div></div>
+<div id="liste"><div class="loading">⏳ Chargement des devoirs...</div></div>
 <script>
-let devoirs=JSON.parse(localStorage.getItem('devoirs')||'[]');
-function sauver(){localStorage.setItem('devoirs',JSON.stringify(devoirs));}
-function afficher(){
-const l=document.getElementById('liste');
-if(!devoirs.length){l.innerHTML='<div class="empty">🎉 Aucun devoir !</div>';return;}
-l.innerHTML=devoirs.map((d,i)=>`
-<div class="card ${d.prio.includes('Urgent')?'urgent':''} ${d.fait?'done':''}">
-<div class="matiere">${d.mat}</div>
-<div class="titre">${d.titre}</div>
-<div class="date">📅 ${d.date} · ${d.prio}</div>
-<div class="btns">
-<button class="btn-done" onclick="toggle(${i})">${d.fait?'↩️ Refaire':'✅ Terminé'}</button>
-<button class="btn-del" onclick="suppr(${i})">🗑 Supprimer</button>
-</div></div>`).join('');
+const API_KEY = '$2a$10$z7Uenc/f/fr6qqXwloeipOZV9iZzmhok9J6ddqXLMdU43FSubjfFi';
+const BIN_ID = '6a05ae8dadc21f119a9bbeeb';
+const ADMIN_PWD = 'Axel2026';
+let isAdmin = false;
+let devoirs = [];
+
+async function charger() {
+  try {
+    const r = await fetch('https://api.jsonbin.io/v3/b/' + BIN_ID + '/latest', {
+      headers: {'X-Master-Key': API_KEY}
+    });
+    const d = await r.json();
+    devoirs = d.record.devoirs || [];
+    afficher();
+  } catch(e) {
+    document.getElementById('liste').innerHTML = '<div class="empty">❌ Erreur de chargement</div>';
+  }
 }
-function ajouter(){
-const t=document.getElementById('titre').value;
-if(!t){alert('Écris le titre du devoir !');return;}
-devoirs.unshift({mat:document.getElementById('mat').value,titre:t,date:document.getElementById('date').value||'Sans date',prio:document.getElementById('prio').value,fait:false});
-sauver();afficher();
-document.getElementById('titre').value='';
+
+async function sauver() {
+  await fetch('https://api.jsonbin.io/v3/b/' + BIN_ID, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json', 'X-Master-Key': API_KEY},
+    body: JSON.stringify({devoirs})
+  });
 }
-function toggle(i){devoirs[i].fait=!devoirs[i].fait;sauver();afficher();}
-function suppr(i){if(confirm('Supprimer ce devoir ?')){devoirs.splice(i,1);sauver();afficher();}}
-afficher();
+
+function afficher() {
+  const l = document.getElementById('liste');
+  if (!devoirs.length) { l.innerHTML = '<div class="empty">🎉 Aucun devoir !</div>'; return; }
+  l.innerHTML = devoirs.map((d, i) => `
+    <div class="card ${d.prio.includes('Urgent') ? 'urgent' : ''} ${d.fait ? 'done' : ''}">
+      <div class="matiere">${d.mat}</div>
+      <div class="titre">${d.titre}</div>
+      <div class="date">📅 ${d.date} · ${d.prio}</div>
+      ${isAdmin ? `<div class="btns">
+        <button class="btn-done" onclick="toggle(${i})">${d.fait ? '↩️ Refaire' : '✅ Terminé'}</button>
+        <button class="btn-del" onclick="suppr(${i})">🗑 Supprimer</button>
+      </div>` : ''}
+    </div>`).join('');
+}
+
+function demanderAdmin() {
+  const pwd = prompt('Mot de passe admin :');
+  if (pwd === ADMIN_PWD) {
+    isAdmin = true;
+    document.getElementById('form').classList.add('visible');
+    alert('✅ Mode admin activé !');
+    afficher();
+  } else {
+    alert('❌ Mot de passe incorrect');
+  }
+}
+
+async function ajouter() {
+  const t = document.getElementById('titre').value;
+  if (!t) { alert('Écris le titre !'); return; }
+  devoirs.unshift({mat: document.getElementById('mat').value, titre: t, date: document.getElementById('date').value || 'Sans date', prio: document.getElementById('prio').value, fait: false});
+  await sauver();
+  document.getElementById('titre').value = '';
+  afficher();
+}
+
+async function toggle(i) { devoirs[i].fait = !devoirs[i].fait; await sauver(); afficher(); }
+async function suppr(i) { if (confirm('Supprimer ?')) { devoirs.splice(i, 1); await sauver(); afficher(); } }
+
+charger();
 </script>
 </body>
 </html>
